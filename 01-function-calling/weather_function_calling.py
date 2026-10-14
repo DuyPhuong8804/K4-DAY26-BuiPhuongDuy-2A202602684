@@ -9,12 +9,26 @@ Cách chạy:
     python weather_function_calling.py
 """
 
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Đảm bảo in tiếng Việt trên console Windows không lỗi mã hoá
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+# Nạp file .env từ thư mục hiện tại hoặc thư mục gốc
+load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 from google import genai
 from google.genai import types
 
 client = genai.Client()
 
-MODEL = "gemini-2.5-flash"
+import os
+
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 SYSTEM_INSTRUCTION = (
     "Bạn là trợ lý thời tiết thân thiện, trả lời bằng tiếng Việt tự nhiên. "
@@ -70,6 +84,24 @@ def get_weather(city: str) -> str:
     return json.dumps({"city": city, **mock_data.get(city, default)}, ensure_ascii=False)
 
 
+def generate_with_fallback(contents, config):
+    candidate_models = [MODEL, "gemini-2.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"]
+    seen = set()
+    models = [m for m in candidate_models if not (m in seen or seen.add(m))]
+    last_err = None
+    for m in models:
+        try:
+            return client.models.generate_content(
+                model=m,
+                contents=contents,
+                config=config,
+            )
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
+
+
 def run(prompt: str) -> str:
     """Gửi *prompt* tới Gemini, tự động xử lý function calling và trả về câu trả lời cuối."""
     contents: list[types.Content] = [
@@ -77,8 +109,7 @@ def run(prompt: str) -> str:
     ]
 
     # 3. Gọi model — model quyết định có gọi tool hay không
-    resp = client.models.generate_content(
-        model=MODEL,
+    resp = generate_with_fallback(
         contents=contents,
         config=types.GenerateContentConfig(
             tools=TOOLS,
@@ -104,8 +135,7 @@ def run(prompt: str) -> str:
 
         # Gửi kết quả tool trả về cho model
         contents.append(types.Content(role="user", parts=function_responses))
-        resp = client.models.generate_content(
-            model=MODEL,
+        resp = generate_with_fallback(
             contents=contents,
             config=types.GenerateContentConfig(
                 tools=TOOLS,

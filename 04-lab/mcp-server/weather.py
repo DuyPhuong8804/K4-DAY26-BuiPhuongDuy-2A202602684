@@ -2,6 +2,16 @@ from typing import Any
 import asyncio
 import httpx
 import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 from mcp.server.fastmcp import FastMCP
 
 # Initialize FastMCP server
